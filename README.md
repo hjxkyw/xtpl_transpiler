@@ -50,7 +50,7 @@ python xtpl_transpiler.py <input.xtpl> <output.prg>
 If you have an `xtpl` file utilizing features like `defer` and conditional assignment:
 
 ```
-user function ProcessData(lSileint as logical)
+user function ProcessData(lSilent as logical)
   let fileHandle ?= fopen("data.txt")
   Defer fclose(fileHandle)
   
