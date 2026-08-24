@@ -49,6 +49,7 @@ python xtpl_transpiler.py <input.xtpl> <output.prg>
 
 If you have an `xtpl` file utilizing features like `defer` and conditional assignment:
 
+```
 User Function ProcessData()
   let fileHandle ?= FOpen("data.txt")
   defer FClose(fileHandle)
@@ -61,6 +62,7 @@ User Function ProcessData()
   
   // Processing logic...
   Return .T.
+```
 
 The transpiler will output valid ADVPL/TLPP code complete with automated variable hoisting, scope-mangling, and safety injections.
 
