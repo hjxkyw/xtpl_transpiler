@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# --------------------------------------------------------------------------------
 # xtpl_transpiler.py
 # --------------------------------------------------------------------------------
 
@@ -137,6 +139,8 @@ def transpile(source_code):
       return f"{target} == {cond}"
 
   def transpile_feed_chains(line, curr_scope, line_idx):
+    nonlocal temp_var_counter
+
     if "==>" not in line:
       return line
       
@@ -167,7 +171,6 @@ def transpile(source_code):
         body_transpiled = re.sub(rf'\b{alias_user}\b', mangled_alias, block_body, flags=re.IGNORECASE)
         
         temp_pipe = f"__pipe_tmp_{curr_scope}_{temp_var_counter}"
-        nonlocal temp_var_counter
         temp_var_counter += 1
         hoisted_vars.add(temp_pipe)
         
@@ -193,7 +196,6 @@ def transpile(source_code):
         body_transpiled = re.sub(rf'\b{item_user}\b', mangled_item, body_transpiled, flags=re.IGNORECASE)
         
         temp_pipe = f"__pipe_tmp_{curr_scope}_{temp_var_counter}"
-        nonlocal temp_var_counter
         temp_var_counter += 1
         hoisted_vars.add(temp_pipe)
         
@@ -219,7 +221,6 @@ def transpile(source_code):
           raise SyntaxError(f"Line {line_idx+1}: Unsupported reduction meta-operator '[{op}]'")
           
         temp_pipe = f"__pipe_tmp_{curr_scope}_{temp_var_counter}"
-        nonlocal temp_var_counter
         temp_var_counter += 1
         hoisted_vars.add(temp_pipe)
         
@@ -240,7 +241,6 @@ def transpile(source_code):
         body_transpiled = re.sub(rf'\b{right_user}\b', mangled_right, body_transpiled, flags=re.IGNORECASE)
         
         temp_pipe = f"__pipe_tmp_{curr_scope}_{temp_var_counter}"
-        nonlocal temp_var_counter
         temp_var_counter += 1
         hoisted_vars.add(temp_pipe)
         
@@ -252,7 +252,6 @@ def transpile(source_code):
         other_arr = zip_simple_match.group(1).strip()
         
         temp_pipe = f"__pipe_tmp_{curr_scope}_{temp_var_counter}"
-        nonlocal temp_var_counter
         temp_var_counter += 1
         hoisted_vars.add(temp_pipe)
         
@@ -265,7 +264,6 @@ def transpile(source_code):
         count_expr = take_drop_match.group(2).strip()
         
         temp_pipe = f"__pipe_tmp_{curr_scope}_{temp_var_counter}"
-        nonlocal temp_var_counter
         temp_var_counter += 1
         hoisted_vars.add(temp_pipe)
         
@@ -277,7 +275,6 @@ def transpile(source_code):
         size_expr = chunks_slide_match.group(2).strip()
         
         temp_pipe = f"__pipe_tmp_{curr_scope}_{temp_var_counter}"
-        nonlocal temp_var_counter
         temp_var_counter += 1
         hoisted_vars.add(temp_pipe)
         
@@ -288,7 +285,6 @@ def transpile(source_code):
         op_type = drf_match.group(1).lower()
         
         temp_pipe = f"__pipe_tmp_{curr_scope}_{temp_var_counter}"
-        nonlocal temp_var_counter
         temp_var_counter += 1
         hoisted_vars.add(temp_pipe)
         
