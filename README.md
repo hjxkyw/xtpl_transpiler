@@ -50,18 +50,18 @@ python xtpl_transpiler.py <input.xtpl> <output.prg>
 If you have an `xtpl` file utilizing features like `defer` and conditional assignment:
 
 ```
-User Function ProcessData()
-  let fileHandle ?= FOpen("data.txt")
-  defer FClose(fileHandle)
+user function ProcessData(lSileint as logical)
+  let fileHandle ?= fopen("data.txt")
+  Defer fclose(fileHandle)
   
   if fileHandle == -1
     return .F. if lSilent
     ConOut("Error opening file")
     return .F.
-  EndIf
+  endif
   
   // Processing logic...
-  Return .T.
+  return .T.
 ```
 
 The transpiler will output valid ADVPL/TLPP code complete with automated variable hoisting, scope-mangling, and safety injections.
