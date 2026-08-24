@@ -13,6 +13,7 @@ def transpile(source_code):
   in_function = False
   function_buffer = []
   hoisted_vars = set()
+  hoisted_inits = {}
   defer_stack = []
   
   scope_stack = [0]
@@ -31,15 +32,19 @@ def transpile(source_code):
   re_scope_in = re.compile(r'^\s*(?:IF|FOR|WHILE|BEGIN\s+SCOPE)\b', re.IGNORECASE)
   re_scope_out = re.compile(r'^\s*(?:ENDIF|NEXT|ENDDO|END\s+SCOPE)\b', re.IGNORECASE)
   
-  re_let = re.compile(r'^\s*LET\s+([a-zA-Z0-9_]+)\s*:=\s*', re.IGNORECASE)
+  re_let = re.compile(r'^(\s*)LET\s+([a-zA-Z0-9_]+)\s*:=\s*(.+)$', re.IGNORECASE)
+  re_let_standalone = re.compile(r'^(\s*)LET\s+([a-zA-Z0-9_]+)\s*$', re.IGNORECASE)
   re_let_defined_or = re.compile(r'^\s*LET\s+([a-zA-Z0-9_]+)\s*\?=\s*(.+)$', re.IGNORECASE)
   re_defined_or = re.compile(r'^\s*([a-zA-Z0-9_]+)\s*\?=\s*(.+)$', re.IGNORECASE)
   
   re_assign = re.compile(r'^\s*([a-zA-Z0-9_]+)\s*:=\s*', re.IGNORECASE)
   
   re_foreach = re.compile(r'^\s*FOR\s+EACH\s+([a-zA-Z0-9_]+)\s*(?:,\s*([a-zA-Z0-9_]+))?\s+IN\s+(.+)$', re.IGNORECASE)
-  re_for = re.compile(r'^\s*FOR\s+([a-zA-Z0-9_]+)\s*:=\s*(.+)$', re.IGNORECASE)
+  re_for = re.compile(r'^\s*FOR\s+(?P<is_let>LET\s+)?([a-zA-Z0-9_]+)\s*:=\s*(.+)$', re.IGNORECASE)
   re_fortimes = re.compile(r'^\s*FOR\s+(.+?)\s+TIMES(?:,\s*([a-zA-Z0-9_]+))?\s*$', re.IGNORECASE)
+
+  re_if_let = re.compile(r'^\s*IF\s+LET\s+([a-zA-Z0-9_]+)\s*:=\s*(.+)$', re.IGNORECASE)
+  re_while_let = re.compile(r'^\s*WHILE\s+LET\s+([a-zA-Z0-9_]+)\s*:=\s*(.+)$', re.IGNORECASE)
 
   re_defer = re.compile(r'^\s*defer\s+(.+)$', re.IGNORECASE)
   re_explicit_return = re.compile(r'^\s*return\b', re.IGNORECASE)
@@ -85,12 +90,18 @@ def transpile(source_code):
     v_lower = var_name.lower()
     if v_lower in reserved_words:
       raise SyntaxError(f"Cannot use reserved word '{var_name}' as a variable name.")
+    
     if v_lower not in scope_vars[curr_scope]:
-      mangled = f"__blk_{curr_scope}_{var_name}"
+      if curr_scope == 0:
+        mangled = var_name
+      else:
+        mangled = f"__blk_{curr_scope}_{var_name}"
+        
       scope_vars[curr_scope].add(v_lower)
       scope_var_mangling[curr_scope][v_lower] = mangled
       hoisted_vars.add(mangled)
       return mangled
+      
     return scope_var_mangling[curr_scope][v_lower]
 
   def flush_function(line_num):
@@ -99,7 +110,10 @@ def transpile(source_code):
     out_lines.append(function_buffer[0])
     if hoisted_vars:
       for var in sorted(hoisted_vars):
-        out_lines.append(f"  Local {var}")
+        if var in hoisted_inits:
+          out_lines.append(f"  Local {var} := {hoisted_inits[var]}")
+        else:
+          out_lines.append(f"  Local {var}")
     
     body_lines = function_buffer[1:]
     for line in body_lines:
@@ -107,6 +121,7 @@ def transpile(source_code):
       
     function_buffer.clear()
     hoisted_vars.clear()
+    hoisted_inits.clear()
     defer_stack.clear()
 
   with_stack = []
@@ -366,6 +381,8 @@ def transpile(source_code):
       scope_counter = 0
       scope_vars = { 0: set() }
       scope_var_mangling = { 0: {} }
+      hoisted_vars.clear()
+      hoisted_inits.clear()
       with_stack.clear()
       gather_stack.clear()
       defer_stack.clear()
@@ -412,10 +429,57 @@ def transpile(source_code):
       scope_var_mangling[scope_counter] = {}
       curr_scope = scope_stack[-1]
       
+    if_let_match = re_if_let.search(line)
+    while_let_match = re_while_let.search(line)
     let_dor_match = re_let_defined_or.search(line)
+    let_standalone_match = re_let_standalone.search(line)
     dor_match = re_defined_or.search(line)
+    for_match = re_for.search(line)
     
-    if let_dor_match:
+    if if_let_match:
+      var_name = if_let_match.group(1)
+      expr = if_let_match.group(2).strip()
+      indent = re.match(r'^\s*', line).group(0)
+      mangled = register_variable(var_name, curr_scope)
+      function_buffer.append(f"{indent}{mangled} := {expr}")
+      line = f"{indent}If {mangled} != Nil .And. (ValType({mangled}) <> 'L' .Or. {mangled})"
+    elif while_let_match:
+      var_name = while_let_match.group(1)
+      expr = while_let_match.group(2).strip()
+      indent = re.match(r'^\s*', line).group(0)
+      mangled = register_variable(var_name, curr_scope)
+      function_buffer.append(f"{indent}While .T.")
+      function_buffer.append(f"{indent}  {mangled} := {expr}")
+      function_buffer.append(f"{indent}  If {mangled} == Nil .Or. (ValType({mangled}) == 'L' .And. !{mangled})")
+      function_buffer.append(f"{indent}    Exit")
+      function_buffer.append(f"{indent}  EndIf")
+      continue
+    elif for_match:
+      is_let = bool(for_match.group("is_let"))
+      var_name = for_match.group(2)
+      loop_init = for_match.group(3).strip()
+      indent = re.match(r'^\s*', line).group(0)
+      
+      if is_let:
+        mangled = register_variable(var_name, curr_scope)
+      else:
+        var_lower = var_name.lower()
+        declared = False
+        mangled = var_name
+        for s_id in reversed(scope_stack):
+          if var_lower in scope_vars[s_id]:
+            declared = True
+            mangled = scope_var_mangling[s_id][var_lower]
+            break
+        if not declared:
+          raise SyntaxError(f"Line {idx+1}: Variable '{var_name}' used in traditional 'for' loop without prior declaration. Use 'for let {var_name} := ...' to declare it locally.")
+            
+      line = f"{indent}for {mangled} := {loop_init}"
+    elif let_standalone_match:
+      var_name = let_standalone_match.group(2)
+      register_variable(var_name, curr_scope)
+      continue
+    elif let_dor_match:
       var_name = let_dor_match.group(1)
       default_expr = let_dor_match.group(2).strip()
       mangled = register_variable(var_name, curr_scope)
@@ -435,9 +499,16 @@ def transpile(source_code):
     else:
       let_match = re_let.search(line)
       if let_match:
-        var_name = let_match.group(1)
+        indent = let_match.group(1)
+        var_name = let_match.group(2)
+        expr = let_match.group(3).strip()
         mangled = register_variable(var_name, curr_scope)
-        line = re_let.sub(f"{mangled} :=", line, count=1)
+        
+        if curr_scope == 0:
+          hoisted_inits[mangled] = expr
+          continue
+        else:
+          line = f"{indent}{mangled} := {expr}"
       else:
         assign_match = re_assign.search(line)
         if assign_match:
