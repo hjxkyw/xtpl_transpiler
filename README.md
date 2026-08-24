@@ -11,7 +11,7 @@
 
 This repository contains the official Python-based transpiler that translates `xtpl` source code into standard, compliant ADVPL/TLPP code.
 
-** For now the "block-scoped variables" feature is being tested. The other features were implemented but not tested.**
+**For now the "block-scoped variables" feature is being tested. The other features were implemented but not tested.**
 
 ---
 
